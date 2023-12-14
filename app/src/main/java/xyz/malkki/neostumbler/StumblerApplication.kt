@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
 import androidx.work.Constraints
+import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
@@ -99,7 +100,7 @@ class StumblerApplication : Application() {
         workManager.enqueueUniquePeriodicWork(
             ReportSendWorker.PERIODIC_WORK_NAME,
             ExistingPeriodicWorkPolicy.UPDATE,
-            PeriodicWorkRequestBuilder<ReportSendWorker>(Duration.ofHours(8))
+            PeriodicWorkRequestBuilder<ReportSendWorker>(Duration.ofHours(4))
                 .setConstraints(
                     Constraints(
                         requiredNetworkType = NetworkType.CONNECTED,
@@ -109,6 +110,7 @@ class StumblerApplication : Application() {
                         requiresBatteryNotLow = true
                     )
                 )
+                .setInputData(Data.Builder().putBoolean(ReportSendWorker.INPUT_SEND_ALL, false).build())
                 .build()
         )
 

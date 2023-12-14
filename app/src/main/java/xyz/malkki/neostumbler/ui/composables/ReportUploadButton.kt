@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.asFlow
 import androidx.work.Constraints
+import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
@@ -75,6 +76,7 @@ fun ReportUploadButton() {
                                 )
                             )
                             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                            .setInputData(Data.Builder().putBoolean(ReportSendWorker.INPUT_SEND_ALL, true).build())
                             .build()
                     )
                     .await()

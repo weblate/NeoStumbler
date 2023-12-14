@@ -16,6 +16,10 @@ class ReportSendWorker(appContext: Context, params: WorkerParameters) : Coroutin
     companion object {
         const val PERIODIC_WORK_NAME = "report_upload_periodic"
         const val ONE_TIME_WORK_NAME = "report_upload_one_time"
+
+        const val INPUT_SEND_ALL = "send_all"
+
+        private const val MIN_REPORTS_TO_SEND = 100
     }
 
     override suspend fun doWork(): Result {
@@ -26,20 +30,33 @@ class ReportSendWorker(appContext: Context, params: WorkerParameters) : Coroutin
         val db = application.reportDb
 
         val notUploadedReports = db.reportDao().getAllReportsNotUploaded()
-        val geosubmitReports = notUploadedReports.map { report ->
-            Report(
-                report.report.timestamp,
-                Report.Position.fromDbEntity(report.position),
-                report.wifiAccessPoints.map(Report.WifiAccessPoint::fromDbEntity).takeIf { it.isNotEmpty() },
-                report.cellTowers.map(Report.CellTower::fromDbEntity).takeIf { it.isNotEmpty() },
-                report.bluetoothBeacons.map(Report.BluetoothBeacon::fromDbEntity).takeIf { it.isNotEmpty() }
-            )
-        }
 
-        if (geosubmitReports.isEmpty()) {
+        if (notUploadedReports.isEmpty()) {
             Timber.i("No Geosubmit reports to send")
             return Result.success()
         }
+
+        val sendAll = inputData.getBoolean(INPUT_SEND_ALL, true)
+
+        //Send third of the reports at once (or at least 100)
+        val numReportsToSend = (notUploadedReports.size / 3).coerceAtLeast(MIN_REPORTS_TO_SEND)
+        val reportsToSend = if (sendAll || numReportsToSend >= notUploadedReports.size) {
+            notUploadedReports
+        } else {
+            //Randomly select third of the unsent reports
+            notUploadedReports.shuffled().take(numReportsToSend)
+        }
+
+        val geosubmitReports = reportsToSend
+            .map { report ->
+                Report(
+                    report.report.timestamp,
+                    Report.Position.fromDbEntity(report.position),
+                    report.wifiAccessPoints.map(Report.WifiAccessPoint::fromDbEntity).takeIf { it.isNotEmpty() },
+                    report.cellTowers.map(Report.CellTower::fromDbEntity).takeIf { it.isNotEmpty() },
+                    report.bluetoothBeacons.map(Report.BluetoothBeacon::fromDbEntity).takeIf { it.isNotEmpty() }
+                )
+            }
 
         return try {
             val duration = measureTime {
@@ -47,7 +64,7 @@ class ReportSendWorker(appContext: Context, params: WorkerParameters) : Coroutin
             }
 
             val now = Instant.now()
-            db.reportDao().update(*notUploadedReports.map { it.report.copy(uploaded = true, uploadTimestamp = now) }.toTypedArray())
+            db.reportDao().update(*reportsToSend.map { it.report.copy(uploaded = true, uploadTimestamp = now) }.toTypedArray())
 
             Timber.i("Successfully sent ${geosubmitReports.size} reports to MLS in ${duration.toString(DurationUnit.SECONDS, 2)}")
 
